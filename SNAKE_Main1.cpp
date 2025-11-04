@@ -25,3 +25,25 @@ int gameOver;
  fruitY = rand() % height;
  score = 0;
  }
+ 
+void Input(){
+  if(kbhit()){
+    switch(getch()){
+    case 'a':
+      dir = LEFT;
+      break;
+    case 'd':
+      dir = RIGHT;
+      break;
+    case 'w':
+      dir = UP;
+      break;
+    case 's':
+      dir = DOWN;
+      break;
+    case 'x':
+      gameOver = 1;
+      break;
+    }
+  }
+}
