@@ -107,23 +107,6 @@ README.md          # You are here
 * Emoji alignment ensured with proper padding
 
 ---
-
-### 🖼 Example Gameplay (Terminal Output)
-
-
-+——————————————————————————————————————————————+
-|                                                |
-|     ■■▓▓▓▓                                    |
-|             ●                                  |
-|     ▲                                          |
-|                                                |
-|                                                |
-+——————————————————————————————————————————————+
-Score: 12   High: 20
-
-
----
-
 ### 💡 Customization
 
 You can tweak a few options in the code:
