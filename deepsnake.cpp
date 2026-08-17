@@ -2,6 +2,8 @@
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
+#include <vector>
+#include <algorithm>
 
 #ifdef _WIN32
 #include <conio.h>
@@ -39,217 +41,307 @@ void Sleep(int ms) { usleep(ms * 1000); }
 
 using namespace std;
 
-#define STOP 0
-#define LEFT 1
-#define RIGHT 2
-#define UP 3
-#define DOWN 4
+enum Direction { STOP = 0, LEFT, RIGHT, UP, DOWN };
 
-bool gameOver;
-const int width = 20;
-const int height = 20;
-int x, y, fruitX, fruitY, score;
-int tailX[100], tailY[100];
-int nTail;
-int dir;
+struct Position {
+    int x;
+    int y;
 
-// Obstacles
-int obsX[20], obsY[20];
-int nObs = 4;
-
-// High score file
-int highscore = 0;
-
-void loadHighScore() {
-    ifstream file("highscore.txt");
-    if (file.is_open()) {
-        file >> highscore;
-        file.close();
-    } else {
-        highscore = 0;
+    bool operator==(const Position& other) const {
+        return x == other.x && y == other.y;
     }
-}
+};
 
-void saveHighScore() {
-    ofstream file("highscore.txt");
-    if (file.is_open()) {
-        file << highscore;
-        file.close();
+class Snake {
+private:
+    Position head;
+    vector<Position> body;
+    Direction dir;
+    int score;
+    bool alive;
+
+public:
+    Snake(int startX, int startY) {
+        head = {startX, startY};
+        dir = STOP;
+        score = 0;
+        alive = true;
     }
-}
 
-void setup() {
-    srand(time(0));
-    gameOver = false;
-    dir = STOP;
-    x = width / 2;
-    y = height / 2;
-    fruitX = rand() % width;
-    fruitY = rand() % height;
-    score = 0;
-    nTail = 0;
+    Position getHead() const { return head; }
+    const vector<Position>& getBody() const { return body; }
+    Direction getDirection() const { return dir; }
+    int getScore() const { return score; }
+    bool isAlive() const { return alive; }
 
-    // Generate obstacles
-    for (int i = 0; i < nObs; i++) {
-        obsX[i] = rand() % width;
-        obsY[i] = rand() % height;
-        if ((obsX[i] == x && obsY[i] == y) || (obsX[i] == fruitX && obsY[i] == fruitY))
-            i--;
+    void setDirection(Direction newDir) {
+        if (body.size() > 0) {
+            if ((dir == LEFT && newDir == RIGHT) || (dir == RIGHT && newDir == LEFT) ||
+                (dir == UP && newDir == DOWN) || (dir == DOWN && newDir == UP)) {
+                return;
+            }
+        }
+        dir = newDir;
     }
-}
 
-void clearScreen() {
+    void kill() { alive = false; }
+    void addScore(int pts) { score += pts; }
+
+    void move() {
+        if (dir == STOP || !alive) return;
+
+        if (!body.empty()) {
+            for (size_t i = body.size() - 1; i > 0; --i) {
+                body[i] = body[i - 1];
+            }
+            body[0] = head;
+        }
+
+        switch (dir) {
+        case LEFT:  head.x--; break;
+        case RIGHT: head.x++; break;
+        case UP:    head.y--; break;
+        case DOWN:  head.y++; break;
+        default: break;
+        }
+    }
+
+    void grow() {
+        if (body.empty()) {
+            body.push_back(head);
+        } else {
+            body.push_back(body.back());
+        }
+    }
+
+    bool checkSelfCollision() const {
+        for (const auto& segment : body) {
+            if (head == segment) return true;
+        }
+        return false;
+    }
+
+    bool occupies(const Position& pos) const {
+        if (head == pos) return true;
+        for (const auto& segment : body) {
+            if (segment == pos) return true;
+        }
+        return false;
+    }
+};
+
+class HighScoreManager {
+private:
+    string filename;
+    int highscore;
+
+public:
+    HighScoreManager(const string& fname = "highscore.txt") : filename(fname), highscore(0) {
+        load();
+    }
+
+    int getHighScore() const { return highscore; }
+
+    void load() {
+        ifstream file(filename);
+        if (file.is_open()) {
+            file >> highscore;
+            file.close();
+        } else {
+            highscore = 0;
+        }
+    }
+
+    void updateIfHigher(int score) {
+        if (score > highscore) {
+            highscore = score;
+            save();
+        }
+    }
+
+    void save() {
+        ofstream file(filename);
+        if (file.is_open()) {
+            file << highscore;
+            file.close();
+        }
+    }
+};
+
+class Game {
+private:
+    const int width;
+    const int height;
+    Snake snake;
+    Position fruit;
+    vector<Position> obstacles;
+    HighScoreManager highScoreMgr;
+    bool gameOver;
+
+    void clearScreen() {
 #ifdef _WIN32
-    system("cls");
+        system("cls");
 #else
-    system("clear");
+        system("clear");
 #endif
-}
+    }
 
-void Draw() {
-    clearScreen();
+    void generateFruit() {
+        do {
+            fruit.x = rand() % width;
+            fruit.y = rand() % height;
+        } while (isOccupied(fruit, false));
+    }
 
-    // Top wall
-    for (int i = 0; i < width + 2; i++)
-        cout << "⬛";
-    cout << endl;
+    void generateObstacles(int count) {
+        obstacles.clear();
+        for (int i = 0; i < count; i++) {
+            Position obs;
+            do {
+                obs.x = rand() % width;
+                obs.y = rand() % height;
+            } while (obs == snake.getHead() || obs == fruit || isObstacleAt(obs));
+            obstacles.push_back(obs);
+        }
+    }
 
-    for (int i = 0; i < height; i++) {
-        cout << "⬛";
-        for (int j = 0; j < width; j++) {
-            if (i == y && j == x)
-                cout << "🐍"; // Snake head
-            else if (i == fruitY && j == fruitX)
-                cout << "🍎"; // Fruit
-            else {
-                bool printed = false;
+    bool isObstacleAt(const Position& pos) const {
+        for (const auto& obs : obstacles) {
+            if (obs == pos) return true;
+        }
+        return false;
+    }
 
-                for (int o = 0; o < nObs; o++) {
-                    if (obsX[o] == j && obsY[o] == i) {
-                        cout << "🧱"; // Obstacle
-                        printed = true;
-                        break;
-                    }
-                }
+    bool isOccupied(const Position& pos, bool checkFruit = true) const {
+        if (snake.occupies(pos)) return true;
+        if (isObstacleAt(pos)) return true;
+        if (checkFruit && fruit == pos) return true;
+        return false;
+    }
 
-                if (!printed) {
-                    for (int k = 0; k < nTail; k++) {
-                        if (tailX[k] == j && tailY[k] == i) {
-                            cout << "🟩"; // Snake body
-                            printed = true;
+public:
+    Game(int w = 20, int h = 20) : width(w), height(h), snake(w / 2, h / 2), gameOver(false) {}
+
+    void setup() {
+        srand(static_cast<unsigned int>(time(0)));
+        snake = Snake(width / 2, height / 2);
+        gameOver = false;
+        generateFruit();
+        generateObstacles(4);
+    }
+
+    void draw() {
+        clearScreen();
+
+        for (int i = 0; i < width + 2; i++) cout << "⬛";
+        cout << endl;
+
+        for (int y = 0; y < height; y++) {
+            cout << "⬛";
+            for (int x = 0; x < width; x++) {
+                Position current = {x, y};
+                if (current == snake.getHead()) {
+                    cout << "🐍";
+                } else if (current == fruit) {
+                    cout << "🍎";
+                } else if (isObstacleAt(current)) {
+                    cout << "🧱";
+                } else {
+                    bool isBody = false;
+                    for (const auto& seg : snake.getBody()) {
+                        if (seg == current) {
+                            cout << "🟩";
+                            isBody = true;
                             break;
                         }
                     }
+                    if (!isBody) cout << "  ";
                 }
+            }
+            cout << "⬛" << endl;
+        }
 
-                if (!printed)
-                    cout << "  "; // Empty space
+        for (int i = 0; i < width + 2; i++) cout << "⬛";
+        cout << endl;
+
+        cout << "\nScore: " << snake.getScore() << "   High Score: " << highScoreMgr.getHighScore() << endl;
+        cout << "Controls: W/A/S/D  |  X = Exit" << endl;
+    }
+
+    void handleInput() {
+        if (_kbhit()) {
+            char key = _getch();
+            switch (key) {
+            case 'a': case 'A': snake.setDirection(LEFT); break;
+            case 'd': case 'D': snake.setDirection(RIGHT); break;
+            case 'w': case 'W': snake.setDirection(UP); break;
+            case 's': case 'S': snake.setDirection(DOWN); break;
+            case 'x': case 'X': gameOver = true; break;
             }
         }
-        cout << "⬛" << endl;
     }
 
-    // Bottom wall
-    for (int i = 0; i < width + 2; i++)
-        cout << "⬛";
-    cout << endl;
+    void updateLogic() {
+        snake.move();
+        Position head = snake.getHead();
 
-    cout << "\nScore: " << score << "   High Score: " << highscore << endl;
-    cout << "Controls: W/A/S/D  |  X = Exit" << endl;
-}
+        // Boundary collision
+        if (head.x < 0 || head.x >= width || head.y < 0 || head.y >= height) {
+            gameOver = true;
+            snake.kill();
+        }
 
-void Input() {
-    if (_kbhit()) {
-        switch (_getch()) {
-        case 'a':
-        case 'A': dir = LEFT; break;
-        case 'd':
-        case 'D': dir = RIGHT; break;
-        case 'w':
-        case 'W': dir = UP; break;
-        case 's':
-        case 'S': dir = DOWN; break;
-        case 'x':
-        case 'X': gameOver = true; break;
+        // Obstacle collision
+        if (isObstacleAt(head)) {
+            gameOver = true;
+            snake.kill();
+        }
+
+        // Self collision
+        if (snake.checkSelfCollision()) {
+            gameOver = true;
+            snake.kill();
+        }
+
+        // Fruit eating
+        if (head == fruit) {
+            snake.addScore(10);
+            snake.grow();
+            generateFruit();
         }
     }
-}
 
-void logic() {
-    int prevX = tailX[0];
-    int prevY = tailY[0];
-    int prev2X, prev2Y;
-    tailX[0] = x;
-    tailY[0] = y;
+    void run() {
+        highScoreMgr.load();
+        char choice;
+        do {
+            setup();
+            while (!gameOver) {
+                draw();
+                handleInput();
+                updateLogic();
+                int speed = max(60, 150 - (snake.getScore() / 5));
+                Sleep(speed);
+            }
 
-    for (int i = 1; i < nTail; i++) {
-        prev2X = tailX[i];
-        prev2Y = tailY[i];
-        tailX[i] = prevX;
-        tailY[i] = prevY;
-        prevX = prev2X;
-        prevY = prev2Y;
+            clearScreen();
+            cout << "\n💀 Game Over! Final Score = " << snake.getScore() << endl;
+            if (snake.getScore() > highScoreMgr.getHighScore()) {
+                highScoreMgr.updateIfHigher(snake.getScore());
+                cout << "🏆 New High Score!" << endl;
+            }
+
+            cout << "\nPress (R) to Replay or (Q) to Quit: ";
+            cin >> choice;
+            choice = tolower(choice);
+        } while (choice == 'r');
+
+        cout << "\n🐍 Thanks for playing Snake Game!\n";
     }
-
-    switch (dir) {
-    case LEFT:  x--; break;
-    case RIGHT: x++; break;
-    case UP:    y--; break;
-    case DOWN:  y++; break;
-    }
-
-    // Boundary collision
-    if (x >= width || x < 0 || y >= height || y < 0)
-        gameOver = true;
-
-    // Obstacle collision
-    for (int o = 0; o < nObs; o++)
-        if (x == obsX[o] && y == obsY[o])
-            gameOver = true;
-
-    // Tail collision
-    for (int i = 0; i < nTail; i++)
-        if (tailX[i] == x && tailY[i] == y)
-            gameOver = true;
-
-    // Eating fruit
-    if (x == fruitX && y == fruitY) {
-        score += 10;
-        fruitX = rand() % width;
-        fruitY = rand() % height;
-        nTail++;
-    }
-}
+};
 
 int main() {
-    loadHighScore();
-    char choice;
-
-    do {
-        setup();
-        while (!gameOver) {
-            Draw();
-            Input();
-            logic();
-            int speed = max(60, 150 - (score / 5));
-            Sleep(speed);
-        }
-
-        clearScreen();
-        cout << "\n💀 Game Over! Final Score = " << score << endl;
-
-        if (score > highscore) {
-            highscore = score;
-            saveHighScore();
-            cout << "🏆 New High Score!" << endl;
-        }
-
-        cout << "\nPress (R) to Replay or (Q) to Quit: ";
-        cin >> choice;
-        choice = tolower(choice);
-
-    } while (choice == 'r');
-
-    cout << "\n🐍 Thanks for playing Snake Game!\n";
+    Game game(20, 20);
+    game.run();
     return 0;
 }
