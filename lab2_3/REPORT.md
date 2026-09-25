@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| Agent used for run 2 | Gemini 3.6 Flash (High) / Antigravity |
+| Agent used for run 2 | Gemini 3.8 Flash (High) / Antigravity |
 | `ubiquitous-language` install route | pasted SKILL.md (it643-content/skills/ubiquitous-language) |
 | `refactoring/` pack install route | pasted SKILL.md (it643-content/skills/refactoring) |
 
@@ -92,4 +92,4 @@ To be completely honest, we cannot mathematically prove behavior preservation be
 
 ---
 
-Sections 7 and 8 together: **380 words.**
+Sections 7 and 8 together: **386 words.**
