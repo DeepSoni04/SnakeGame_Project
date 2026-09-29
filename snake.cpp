@@ -125,9 +125,24 @@ void Draw() {
     cout << "Controls: W/A/S/D  |  X = Exit" << endl;
 }
 
+// Input Seam for testability (Object Seam)
+class InputHandler {
+public:
+    virtual ~InputHandler() {}
+    virtual bool hasKey() { return _kbhit(); }
+    virtual int getKey() { return _getch(); }
+};
+
+InputHandler defaultInputHandler;
+InputHandler* g_input = &defaultInputHandler;
+
+void setInputHandler(InputHandler* handler) {
+    g_input = handler ? handler : &defaultInputHandler;
+}
+
 void Input() {
-    if (_kbhit()) {
-        switch (_getch()) {
+    if (g_input->hasKey()) {
+        switch (g_input->getKey()) {
         case 'a':
         case 'A':
             dir = LEFT;
@@ -151,6 +166,7 @@ void Input() {
         }
     }
 }
+
 
 void logic() {
     int prevX = tailX[0];
